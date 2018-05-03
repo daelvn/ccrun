@@ -1,0 +1,266 @@
+#!/bin/sh
+# ccrun | 03.05.2018
+# By daelvn
+# Run environments in CCEmuX (requires ccemux-git)
+
+TELLNE="tput sgr0"
+TELLOK="tput setaf 2"
+TELLWAR="tput setaf 3"
+TELLERR="tput setaf 1"
+tell () {
+  $1 # mode
+  tput bold
+  echo "$2"
+  tput sgr0
+  $1
+  echo "  $3"
+  tput sgr0
+}
+yell () { tell "$TELLWAR" "$0" "$*" >&2; }
+die () { yell "$*"; exit 111; }
+try () { "$@" || die "ccrun $*"; }
+
+### Variables ###
+CR_CONFIG_DIR="/home/$(whoami)/.config/ccrun"
+CR_ID="0"
+CR_EDITOR="vi"
+CR_SOURCE="."
+CR_IMPORT=""
+
+### Utils ###
+## _excmd: Check if a command exists
+# $1: command
+_excmd_backend () {
+  command -v "$1" &> /dev/null
+}
+_excmd () {
+  if _excmd_backend "$1"; then
+    tell "$TELLOK" "ccrun#_excmd" "Command $1 found!"
+  else
+    tell "$TELLWAR" "ccrun#_excmd" "Command $1 not found!"
+  fi
+}
+## _ed: Edit file
+# $1: editor ($EDITOR)
+# $2: file
+_ed () {
+  tell "$TELLWAR" "ccrun#_ed" "Editing file $2 using $1"
+  $1 "$2"
+}
+## _chkdir: Check if directory exists
+# $1: directory
+_chkdir () {
+  if [[ -d "$1" ]]; then
+    true
+  else
+    tell "$TELLWAR" "ccrun#_chkdir" "Directory $1 does not exist"
+    if [[ $CR_ASK_CHKDIR -gt 0 ]]; then
+      tell "$TELLWAR" "ccrun#_chkdir" "Do you wish to create the directory?"
+      read -r -p "Create? [y/n] " CR_ASK_CHKDIR_DO
+      CR_ASK_CHKDIR_DO=${CR_ASK_CHKDIR_DO,,}
+      if [[ "$CR_ASK_CHKDIR_DO" =~ ^(yes|y)$ ]]; then
+        tell "$TELLNE" "ccrun#_chkdir" "Creating directory $1"
+        mkdir -p "$1"
+        true
+      else
+        tell "$TELLERR" "ccrun#_chkdir" "Did not create directory"
+        exit 6
+      fi
+    else
+      tell "$TELLERR" "ccrun#_chkdir" "Could not create directory"
+      exit 6
+    fi
+  fi
+}
+
+### Backtargets ###
+## Check the dependencies
+check_dep () {
+  tell "$TELLNE" "ccrun@check_dep" "Checking for $1 in path"
+  _excmd "$1"
+}
+check_deps () {
+  tell "$TELLNE" "ccrun" "Checking dependencies"
+  check_dep "ccemux"
+  check_dep "getopt"
+  tell "$TELLOK" "ccrun@check_deps" "Done!"
+}
+## Create configuration
+# $1: editor
+# $2: config-dir
+# $3: id
+create_config () {
+  tell "$TELLNE" "ccrun" "Creating configuration"
+  mkdir -p "$2"
+  tell "$TELLNE" "ccrun@create_config" "Please close CCEmuX when it starts up"
+  ccemux -d "$2" &> /dev/null
+  tell "$TELLNE" "ccrun@create_config" "Opening ccemux.default.json with preferred editor"
+  _ed "$1" "$2/ccemux.default.json"
+  tell "$TELLNE" "ccrun@create_config" "Making ccemux.default.json the used configuration file"
+  cp "$2/ccemux.default.json" "$2/ccemux.json"
+  tell "$TELLNE" "ccrun@create_config" "Creating $2/computer/$3"
+  mkdir "$2/computer/$3"
+  tell "$TELLOK" "ccrun@create_config" "Done!"
+}
+## Copy specified folder into the data folder
+# $1: config-dir
+# $2: id
+# $3: source
+copy_files () {
+  tell "$TELLNE" "ccrun" "Copying files into data folder"
+  tell "$TELLNE" "ccrun@copy_files" "Data folder: $1/computer/$2"
+  LOCAL_CR_DATA_DIR="$1/computer/$2"
+  tell "$TELLNE" "ccrun@copy_files" "Copying files"
+  _chkdir "$3" && _chkdir "$LOCAL_CR_DATA_DIR" && cp -r "$3" "$LOCAL_CR_DATA_DIR" &> /dev/null
+  tell "$TELLOK" "ccrun@copy_files" "Done!"
+}
+## Run CCEmuX
+# $1: config-dir
+run_ccx () {
+  tell "$TELLNE" "ccrun@run_ccx" "Running CCEmuX"
+  ccemux -d "$1" &> /dev/null
+  tell "$TELLOK" "ccrun@run_ccx" "Done!"
+}
+## Move old
+# $1: config-dir
+# $2: id
+move_old () {
+  tell "$TELLNE" "ccrun@move_old" "Moving $2 to $2.old"
+  _chkdir "$1/computer/$2" && mv "$1/computer/$2" "$1/computer/$2.old"
+  tell "$TELLOK" "ccrun@move_old" "Done!"
+}
+
+### Targets ###
+_cr_present () {
+  tell "$TELLOK" "ccrun v03.05.2018" "Run ComputerCraft projects from Linux"
+}
+_cr_version () {
+  echo "v03.05.2018"
+}
+_cr_help () {
+  _cr_present
+  tell "$TELLNE" "-h, --help               " "Shows this help message"
+  tell "$TELLNE" "-v, --version            " "Prints the ccrun version"
+  tell "$TELLNE" "-i, --install            " "Installs and creates the configuration for ccrun"
+  tell "$TELLNE" "-u, --uninstall          " "Uninstalls ccrun"
+  tell "$TELLNE" "-c, --config <dir>       " "Specify a different config directory"
+  tell "$TELLNE" "-e, --editor <ed>        " "Specify a different \$EDITOR"
+  tell "$TELLNE" "-d, --id <id>            " "Specify a different CCEmuX Computer ID"
+  tell "$TELLNE" "-a, --ask                " "Asks for every directory that was not found"
+  tell "$TELLNE" "--just-check-dependencies" "Only checks if the dependencies are satisfied"
+  tell "$TELLNE" "<env>                    " "Environment to run"
+}
+## Install ccrun
+# $1: editor
+# $2: config-dir
+# $3: id
+# Uses: check_deps create_config
+cr_install () {
+  _cr_present
+  try check_deps
+  try create_config "$1" "$2"
+}
+## Uninstall
+# $1: config-dir
+cr_uninstall () {
+  _cr_present
+  tell "$TELLNE" "ccrun:uninstall" "Removing $1"
+  rm -rf "$1"
+  tell "$TELLOK" "ccrun:uninstall" "Done!"
+}
+## Run
+# $1: config-dir
+# $2: id
+# $3: source
+# Uses: copy_files run_ccx
+cr_run () {
+  _cr_present
+  try copy_files "$1" "$2" "$3"
+  run_ccx "$1"
+}
+
+### Arguments ###
+CR_OPTIONS="hviueda"
+CR_LONG_OPTIONS="help,ask,version,install,uninstall,config,editor,id,just-check-dependencies"
+CR_GETOPT=$(getopt --options="$CR_OPTIONS" --longoptions="$CR_LONG_OPTIONS" --name "$0" -- "$@")
+if [[ $? -ne 0 ]]; then
+  tell "$TELLERR" "ccrun!1" "getopt complained"
+  exit 1
+fi
+eval set -- "$CR_GETOPT"
+
+# Option loop
+while true; do
+  case "$1" in
+    -h|--help)
+      _cr_help
+      CR_NORUN=1
+      shift
+      break
+      ;;
+    -v|--version)
+      _cr_version
+      CR_NORUN=1
+      shift
+      break
+      ;;
+    -c|--config)
+      CR_CONFIG_DIR="$2"
+      shift 2
+      ;;
+    -e|--editor)
+      CR_EDITOR="$2"
+      shift 2
+      ;;
+    -d|--id)
+      CR_ID="$2"
+      shift 2
+      ;;
+    -i|--install)
+      try cr_install "$CR_EDITOR" "$CR_CONFIG_DIR" "$CR_ID" 
+      CR_NORUN=1
+      shift
+      ;;
+    -u|--uninstall)
+      try cr_uninstall "$CR_CONFIG_DIR"
+      CR_NORUN=1
+      shift
+      ;;
+    -a|--ask)
+      CR_ASK_CHKDIR=1
+      shift
+      ;;
+    --just-check-dependencies)
+      check_deps
+      CR_NORUN=1
+      shift
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      tell "$TELLERR" "ccrun!2" "getopt error."
+      exit 2
+      ;;
+  esac
+done
+
+# Exit?
+if [[ $CR_NORUN -gt 0 ]]; then
+  exit 0
+fi
+
+# Check for last arguments
+if [[ $# -lt 1 ]]; then
+  tell "$TELLERR" "ccrun!3" "Environment expected"
+  exit 3
+fi
+
+# Run
+tell "$TELLNE" "ccrun" "Final configuration directory: $CR_CONFIG_DIR"
+tell "$TELLNE" "ccrun" "Final computer ID: $CR_ID"
+tell "$TELLNE" "ccrun" "Final environment: $CR_SOURCE"
+tell "$TELLOK" "ccrun" "Executing normally"
+try cr_run "$CR_CONFIG_DIR" "$CR_ID" "$CR_SOURCE"
+
