@@ -12,4 +12,4 @@ You can specify another configuration folder with the `-c` or `--config` flag, a
 ## Credits
 Thanks to all the collaborators at [CCEmuX](https://github.com/CCEmuX) for the amazing emulator.
 ## License
-This project is under the MIT License.
+This project is released to the public domain.
