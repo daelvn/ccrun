@@ -1,4 +1,7 @@
 # ccrun
+
+**WARNING: This project has been replaced by [ccrunx](//github.com/daelvn/ccrunx). This project is deprecated.**
+
 `ccrun` is a wrapper for [CCEmuX](https://github.com/CCEmuX/CCEmuX), a ComputerCraft Emulator. This shell script lets you pass a directory and execute the whole project in a ComputerCraft environment, without having to configure CCEmuX or copy the files manually.
 ## Installing
 This should be as easy as cloning this repo (`git clone https://github.com/daelvn/ccrun.git`), making the script an executable if it isn't already (`chmod +x ./ccrun`) and running it. It's recommendable that you put this script in your path.
